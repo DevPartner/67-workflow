@@ -1,208 +1,179 @@
-# DevUI Samples
+# 67 Meeting Assistant
 
-This folder contains sample agents and workflows designed to work with the Agent Framework DevUI - a lightweight web interface for running and testing agents interactively.
+An AI-powered meeting assistant built on the [Agent Framework](https://github.com/microsoft/agent-framework) with DevUI. It provides two entities served as OpenAI-compatible REST endpoints:
 
-## What is DevUI?
+- **67 Assistant** — a chat agent that answers questions by searching your Second Brain knowledge base
+- **Transcript Q&A** — a workflow that fetches a live meeting transcript, detects whether it contains a question, and answers it using Second Brain
 
-DevUI is a sample application that provides:
+## Architecture
 
-- A web interface for testing agents and workflows
-- OpenAI-compatible API endpoints
-- Directory-based entity discovery
-- In-memory entity registration
-- Sample entity gallery
+```text
+┌─────────────────────────────────────────────────────────┐
+│                      DevUI (port 8080)                  │
+│  ┌─────────────────────┐  ┌──────────────────────────┐  │
+│  │    67 Assistant     │  │   Transcript Q&A         │  │
+│  │    (67_agent/)      │  │   (workflow_transcript/) │  │
+│  └──────────┬──────────┘  └────────────┬─────────────┘  │
+└─────────────┼──────────────────────────┼────────────────┘
+              │                          │
+              │              ┌───────────┴────────────┐
+              │              │  Transcript Server     │
+              │              │  (Rust, :3000)         │
+              │              └────────────────────────┘
+              │
+    ┌─────────┴──────────┐
+    │  Azure AI Foundry  │
+    │  + Second Brain    │
+    │  MCP (:3001)       │
+    └────────────────────┘
+```
 
-> **Note**: DevUI is a sample app for development and testing. For production use, build your own custom interface using the Agent Framework SDK.
+### 67 Assistant (`67_agent/`)
 
-## Quick Start
+A chat agent backed by Azure AI Foundry that enforces retrieval-first answers. Every response must start with a Second Brain search — the agent's middleware hard-blocks any response that skips this step.
 
-### Option 1: In-Memory Mode (Programmatic Registration)
+### Transcript Q&A (`workflow_transcript/`)
 
-Run a single sample directly. This demonstrates how to register agents and workflows in code without using DevUI's directory discovery.
+A four-step workflow:
 
-This sample uses Microsoft Foundry. Before running it:
+1. **TranscriptReceiver** — fetches the live transcript from the Rust server (`GET :{port}/transcript`)
+2. **QuestionDetector** — asks the LLM whether the transcript contains a question
+3. **AnswerGenerator** _(question path)_ — calls Second Brain MCP to answer the detected question
+4. **SilentTerminator** _(no-question path)_ — returns `"No question detected in transcript."`
 
-1. Copy `.env.example` in this folder to `.env`, or export the same values in your shell
-2. Set `FOUNDRY_PROJECT_ENDPOINT` and `FOUNDRY_MODEL`
-3. Run `az login`
+## Prerequisites
 
-Then start the sample:
+- Python 3.12+
+- [Agent Framework](https://github.com/microsoft/agent-framework) with DevUI (`agent-framework-devui`)
+- Azure CLI authenticated: `az login`
+- Second Brain MCP server running at `http://localhost:3001/mcp`
+- Rust transcript server running (default port `3000`) for the Transcript Q&A workflow
+
+## Setup
+
+1. Copy `.env.example` to `.env` and fill in your values:
 
 ```bash
-cd python/samples/02-agents/devui
-python in_memory_mode.py
+cp .env.example .env
 ```
 
-This opens your browser at http://localhost:8090 with two Foundry-backed agents and a simple text transformation workflow.
+```env
+FOUNDRY_PROJECT_ENDPOINT=https://<resource>.services.ai.azure.com/api/projects/<project>
+FOUNDRY_MODEL=gpt-4o
 
-### Option 2: Directory Discovery with Shared Root `.env`
+TRANSCRIPT_BASE_URL=http://localhost
+TRANSCRIPT_PORT=3000
+```
 
-Run the folder-level launcher to load `samples/02-agents/devui/.env` and then start DevUI with directory discovery for this folder:
+2. Authenticate with Azure:
 
 ```bash
-cd python/samples/02-agents/devui
-python main.py
-```
-
-This starts the server at http://localhost:8080 with all discoverable agents and workflows available. The root `.env` acts as shared fallback configuration for discovered samples.
-
-### Option 3: Directory Discovery with the `devui` CLI
-
-If you prefer the CLI directly, you can still launch DevUI from this folder:
-
-```bash
-cd python/samples/02-agents/devui
-devui .
-```
-
-DevUI discovery checks for a sample-specific `.env` first and then falls back to `.env` in `samples/02-agents/devui/`.
-
-## Sample Structure
-
-DevUI discovers samples from Python packages that export either `agent` or `workflow`.
-
-Typical agent layout:
-
-```
-agent_name/
-├── __init__.py      # Must export: agent = ...
-├── agent.py         # Agent implementation
-└── .env.example     # Optional example environment variables
-```
-
-Typical workflow layout:
-
-```
-workflow_name/
-├── __init__.py      # Must export: workflow = ...
-├── workflow.py      # Workflow implementation
-├── workflow.yaml    # Optional declarative definition
-└── .env.example     # Optional example environment variables
-```
-
-## Available Samples
-
-### Agents
-
-| Sample | What it demonstrates | Required keys / auth |
-| ------ | -------------------- | -------------------- |
-| [**agent_weather/**](agent_weather/) | A richer Foundry-backed weather agent that shows chat middleware, function middleware, tool calling, and an approval-required tool alongside auto-approved tools. | `FOUNDRY_PROJECT_ENDPOINT`, `FOUNDRY_MODEL`, plus Azure CLI auth via `az login` |
-| [**agent_foundry/**](agent_foundry/) | A minimal Foundry-backed weather agent with current weather and forecast tools. Use this when you want the smallest possible directory-discovered agent sample. | `FOUNDRY_PROJECT_ENDPOINT`, `FOUNDRY_MODEL`, plus Azure CLI auth via `az login` |
-
-### Workflows
-
-| Sample | What it demonstrates | Required keys / auth |
-| ------ | -------------------- | -------------------- |
-| [**workflow_declarative/**](workflow_declarative/) | A YAML-defined workflow loaded through `WorkflowFactory`, with nested age-based branching and no model client code. | None |
-| [**workflow_with_agents/**](workflow_with_agents/) | A content review workflow that uses agents as executors and routes based on structured review output (`Writer -> Reviewer -> Editor/Publisher -> Summarizer`). | `AZURE_OPENAI_ENDPOINT`, plus `AZURE_OPENAI_CHAT_MODEL` or `AZURE_OPENAI_MODEL`; Azure CLI auth via `az login`; `AZURE_OPENAI_API_VERSION` is optional |
-| [**workflow_spam/**](workflow_spam/) | A multi-step spam detection workflow with human-in-the-loop approval, branching for spam vs. legitimate messages, and a final reporting step. | None |
-| [**workflow_fanout/**](workflow_fanout/) | A larger fan-out/fan-in data processing workflow with parallel validation, multiple transformations, QA, aggregation, and demo failure toggles. | None |
-
-### Standalone Examples
-
-| Sample | What it demonstrates | Required keys / auth |
-| ------ | -------------------- | -------------------- |
-| [**in_memory_mode.py**](in_memory_mode.py) | Registers multiple entities directly in Python: two Foundry-backed agents plus a simple workflow, all served from one file without directory discovery. | `FOUNDRY_PROJECT_ENDPOINT`, `FOUNDRY_MODEL`, plus Azure CLI auth via `az login` |
-
-## Environment Variables
-
-For samples that require external services:
-
-1. Copy `.env.example` to `.env`
-2. Fill in the required values
-3. Run `az login` for samples that use Azure CLI authentication
-
-Directory discovery checks `.env` files in this order:
-
-1. The entity directory itself, for example `agent_weather/.env`
-2. The root DevUI samples folder, `samples/02-agents/devui/.env`
-
-That means the root `.env.example` can hold shared defaults for multiple samples, while a sample-specific `.env` can override those values when needed.
-
-`in_memory_mode.py` and `main.py` both load `.env` from `samples/02-agents/devui/`, so the root `.env.example` in this folder is the right starting point for both commands.
-
-Alternatively, set environment variables globally:
-
-```bash
-# Foundry-backed samples
-export FOUNDRY_PROJECT_ENDPOINT="https://your-project.services.ai.azure.com"
-export FOUNDRY_MODEL="gpt-4o"
-
-# Azure OpenAI workflow_with_agents sample
-export AZURE_OPENAI_ENDPOINT="https://your-resource.openai.azure.com"
-export AZURE_OPENAI_CHAT_MODEL="gpt-4o"
-export AZURE_OPENAI_MODEL="gpt-4o"
-
 az login
 ```
 
-## Using DevUI with Your Own Agents
+## Running
 
-To make your agent discoverable by DevUI:
+### All entities (recommended)
 
-1. Create a folder for your agent
-2. Add an `__init__.py` that exports `agent` or `workflow`
-3. (Optional) Add a `.env` file for environment variables
-
-Example:
-
-```python
-# my_agent/__init__.py
-from agent_framework import Agent
-from agent_framework.openai import OpenAIChatClient
-
-agent = Agent(
-    name="MyAgent",
-    description="My custom agent",
-    client=OpenAIChatClient(),
-    # ... your configuration
-)
-```
-
-Then run:
+Starts DevUI on port 8080 and auto-discovers both the agent and the workflow:
 
 ```bash
-devui /path/to/my/agents/folder
+python main.py
+```
+
+DevUI opens at `http://localhost:8080` with both entities listed.
+
+### Individual entities
+
+**67 Assistant only** (port 8091):
+
+```bash
+python -m 67_agent.agent
+```
+
+**Transcript Q&A workflow only** (port 8092):
+
+```bash
+python -m workflow_transcript.workflow
+```
+
+### In-memory demo
+
+`in_memory_mode.py` shows programmatic entity registration without directory discovery — useful as a minimal reference for building your own DevUI setup:
+
+```bash
+python in_memory_mode.py
 ```
 
 ## API Usage
 
-DevUI exposes OpenAI-compatible endpoints:
+DevUI exposes OpenAI-compatible endpoints. List available entities:
+
+```bash
+curl http://localhost:8080/v1/entities
+```
+
+Trigger the Transcript Q&A workflow:
 
 ```bash
 curl -X POST http://localhost:8080/v1/responses \
   -H "Content-Type: application/json" \
   -d '{
     "model": "agent-framework",
-    "input": "What is the weather in Seattle?",
-    "extra_body": {"entity_id": "agent_directory_weather-agent_<uuid>"}
+    "input": "{}",
+    "extra_body": {
+      "entity_id": "<workflow-entity-id>",
+      "data": {"port": 3000}
+    }
   }'
 ```
 
-List available entities:
+The workflow POST body accepts:
 
-```bash
-curl http://localhost:8080/v1/entities
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `port` | `int` | `TRANSCRIPT_PORT` env or `3000` | Port of the running transcript server |
+| `base_url` | `str` | `TRANSCRIPT_BASE_URL` env or `http://localhost` | Base URL of the transcript server |
+
+## Project Structure
+
+```text
+67-workflow/
+├── main.py                     # Launch DevUI with auto-discovery (port 8080)
+├── in_memory_mode.py           # Minimal example of programmatic entity registration
+├── subprocess_script_runner.py # Skill script runner for file-based skills
+├── .env.example                # Shared environment variable template
+├── 67_agent/
+│   ├── agent.py                # 67 Assistant definition + SbToolRequiredMiddleware
+│   ├── __init__.py
+│   ├── .env.example
+│   └── skills/
+│       └── second-brain/
+│           └── SKILL.md        # sb MCP tool usage rules injected into agent instructions
+└── workflow_transcript/
+    ├── workflow.py             # All executors + WorkflowBuilder wiring
+    └── __init__.py
 ```
 
-## Learn More
+## Second Brain MCP Tools
 
-- [DevUI Documentation](../../../packages/devui/README.md)
-- [Agent Framework Documentation](https://docs.microsoft.com/agent-framework)
-- [Sample Guidelines](../../SAMPLE_GUIDELINES.md)
+The `sb` tool exposes three operations used by both the agent and the workflow:
+
+| Tool | Best for |
+|------|----------|
+| `keyword_search` | Exact names, titles, code identifiers, acronyms |
+| `semantic_search` | Concepts, ideas, natural-language questions |
+| `get_document` | Full document by ID from a prior search result |
+
+> [!NOTE]
+> The agent enforces a hard limit of two `sb` calls per turn: one search (keyword or semantic) plus an optional `get_document`. Retrying with different parameters is not allowed.
 
 ## Troubleshooting
 
-**Missing credentials or settings**: Check your `.env` files, confirm the required variables for the sample you are running, and make sure `az login` has completed for Azure-authenticated samples.
+**`az login` required** — Both the agent and workflow use `AzureCliCredential`. Run `az login` before starting.
 
-**Import errors**: Make sure you've installed the devui package:
+**Second Brain MCP not reachable** — Ensure the MCP server is running at `http://localhost:3001/mcp` before starting the agent or the `AnswerGenerator` step of the workflow.
 
-```bash
-pip install agent-framework-devui --pre
-```
+**Transcript server not running** — The Transcript Q&A workflow will fail at step 1 if `GET :{port}/transcript` is unreachable. Start the Rust transcript server first.
 
-**Port conflicts**: DevUI uses ports 8080 (directory mode) and 8090 (in-memory mode) by default. Close other services or specify a different port:
-
-```bash
-devui --port 8888
-```
+**Port conflicts** — Default ports are 8080 (main), 8091 (agent standalone), 8092 (workflow standalone). Adjust in the respective `main()` calls if another service occupies them.
