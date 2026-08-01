@@ -174,3 +174,28 @@ Update after **every** task completion by appending to the relevant section.
 
 - `/task-researcher` — research a topic, produce a research file in `.copilot-tracking/research/`
 - `/task-planner` — validate research, produce plan + details + prompt files
+- `/sb-logging` - Verbose Logging Conventions
+
+---
+
+# MCP Research Priority
+
+For any research task, **always try MCP sources first** before falling back to WebSearch or WebFetch.
+
+| Goal | MCP server |
+|------|-----------|
+| Microsoft-specific documentation | `microsoftdocs/mcp` |
+| Deep repository or wiki exploration | `cognitionai/deepwiki` |
+| Library, framework, or npm package docs | `upstash/context7` |
+
+## Context7 Lookup Steps
+
+When researching any library, framework, or package:
+
+1. Call `mcp_context7_resolve-library-id({ libraryName: "..." })` to find the canonical ID
+2. Select the result with the **highest score**
+3. Call `mcp_context7_get-library-docs({ context7CompatibleLibraryID: "...", topic: "..." })`
+4. Set `tokens`:
+   - `5000` for standard feature lookups
+   - `7000–10000` for complex integrations or deep-dive topics
+5. **Fallback to WebSearch/WebFetch only if Context7 returns no usable results**
