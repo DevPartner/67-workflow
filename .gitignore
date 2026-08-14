@@ -6,11 +6,11 @@
 target/
 .specify
 specs
-.github
 .foam
 .copilot-tracking
 sh.exe.stackdump
 Cargo.lock
+.work-items
 
 # macOS
 .DS_Store
