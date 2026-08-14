@@ -44,6 +44,15 @@ A four-step workflow:
 ## Prerequisites
 
 - Python 3.12+
+- Install the compatible Python packages in a fresh environment:
+
+```bash
+pip install "mcp==1.29.0"
+pip install agent-framework-devui --pre
+```
+
+> Use `mcp==1.29.0` instead of `mcp` 2.x for now. The current Rust transcript server still expects the older protocol version, so 2.x can cause connection/requeue issues.
+
 - [Agent Framework](https://github.com/microsoft/agent-framework) with DevUI (`agent-framework-devui`)
 - Azure CLI authenticated: `az login`
 - Second Brain MCP server running at `http://localhost:3001/mcp`
@@ -51,7 +60,14 @@ A four-step workflow:
 
 ## Setup
 
-1. Copy `.env.example` to `.env` and fill in your values:
+1. Install the required Python dependencies in a fresh environment:
+
+```bash
+pip install "mcp==1.29.0"
+pip install agent-framework-devui --pre
+```
+
+2. Copy `.env.example` to `.env` and fill in your values:
 
 ```bash
 cp .env.example .env

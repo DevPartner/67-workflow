@@ -1,6 +1,9 @@
-
-# MCP `sb` Tools
-
+---
+name: second-brain
+title: "MCP `sb` Tools"
+description: "Search and retrieve notes from the Second Brain knowledge base using keyword search, semantic search, and document lookup."
+---
+.
 The sb (Second Brain) MCP server exposes three tools:
 
 ### `keyword_search` — use by default
